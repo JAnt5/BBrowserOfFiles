@@ -40,6 +40,7 @@ WINDOW *displayTopWindow(int row, int col) {
   return window;
 }
 
+
 WINDOW *displayTerminalMenu(int row, int col, char *input) {
   int height = MENU_HEIGHT;
   int width = col - 1;
@@ -88,26 +89,35 @@ WINDOW *displayWelcomeScreen(int row, int col, WINDOW *window) {
   return window;
 }
 WINDOW *FileBrowser(int row, int col, char *path, WINDOW *window) {
-
+    char dir[100];
     char *files[256] = {};
     struct dirent *de;
-    DIR *dr = opendir(".");
-    /*if (dr == NULL) {
-      printf("Could not open current directory");
-      folder_error = 1;
-    }*/
-    int i = 0;
-    while ((de = readdir(dr)) != NULL){
-      //printf(">%s\n", de->d_name);
-      strcpy(files[i],de->d_name);
-      i++;
+    path += 3; // odreže vn cd  pa presledek
+
+    if (chdir(path) != 0){
+      //mvwprintw(window,2,2,"Chdir failed" );
+      //wrefresh(window);
+
+      //return window;
+    }  
+
+    mvwprintw(window, 2, 2, "Current working directory: %s",getcwd(dir,100));
+
+    DIR *dr = opendir(dir);
+    int x = 2;
+    int y = 2;
+    if (dr == NULL)
+    {
+        mvwprintw(window,2,2,"Could not open current directory" );
+        wrefresh(window);
+        return 0;
     }
-    closedir(dr);
-    int x=2,y=2;
-    for(int i = 0; i < (sizeof(files) / sizeof(files[0])); i++){
-        mvwprintw(window, x, y, "%s", files[i]);
+
+    while((de = readdir(dr)) != NULL){
+          mvwprintw(window,y+=2, x, "%s", de ->d_name);
     }
-    //mvwprintw(window, 2, 2, "%s", path);
+    
+    wrefresh(window);
 
     return window;
 
@@ -128,7 +138,6 @@ int main() {
   getmaxyx(stdscr, row, col); /* get the number of rows and columns */
   menu = displayTerminalMenu(row, col, " ");
   welcome_screen = displayWelcomeScreen(row, col, displayTopWindow(row, col));
- 
   while (run) {
 
     getmaxyx(stdscr, row, col); /* get the number of rows and columns */
@@ -141,18 +150,7 @@ int main() {
     } else if (strcmp(ch, "help") == 0) {
       help_menu = displayHelpWindow(row, col, displayTopWindow(row, col));
     } else{
-        /*char path[256];
-        char* token = strtok(ch, " ");
-        while(token != NULL){
-          if(strcmp(token,"cd") == 0){
-            token = strtok(NULL," ");
-          }else{
-            strncpy(path, token, sizeof(path) - 1);
-            path[sizeof(path) - 1] = '\0';
-            token = strtok(NULL, " ");
-          }
-        }*/
-        //wgetstr(file_browser, ch);
+        
         file_browser =FileBrowser(row, col,ch, displayTopWindow(row, col));
     }
     menu = displayTerminalMenu(row, col, ch);

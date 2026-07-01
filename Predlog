@@ -1,0 +1,4 @@
+
+Jure Antolič - BBrowserOfFiles
+
+Za projektno nalogo bom pripravil pregledovalnik datotečnega sistema, ki deluje znotraj BASH okolja in omogoča osnovno navigacijo po imenikih ter pregled datotek. Dodatno bom implementiral enostavno upravljanje zunanjih medijev, kot so USB ključki in drugi prenosni nosilci, vključno z zaznavanjem, priklopom in odklopom naprav.

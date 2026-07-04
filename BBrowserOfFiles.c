@@ -1,6 +1,7 @@
 #include <curses.h>
 #include <dirent.h>
 #include <ncurses.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <term.h>
@@ -8,29 +9,31 @@
 
 #define MAX_FILE_NAME 255
 
+int sdfilt(const struct dirent *de);
+
 void file_menu(WINDOW *menu_win, int highlight, int x, int y, int n_choices,
-               char *choices[], int isFolder[]) {
+               struct dirent *choices[]) {
   int i;
   x += 2;
   y += 2;
-
+  char decorativeChar;
   box(menu_win, 0, 0);
   for (i = 0; i < n_choices; ++i) {
-    if (isFolder[i]) {
-      wattron(menu_win, COLOR_PAIR(1));
+    if(choices[i]->d_type == DT_DIR){
+      decorativeChar = '>';
+    }else{
+      decorativeChar = '-';
     }
-    if (highlight == i + 1) /* High light the present choice */
-    {
+    if (highlight == i + 1) {
       wattron(menu_win, A_REVERSE);
-      mvwprintw(menu_win, y, x, "%s", choices[i]);
+      mvwprintw(menu_win, y, x, "%c %s",decorativeChar,choices[i]->d_name);
 
       wattroff(menu_win, A_REVERSE);
-    } else
-      mvwprintw(menu_win, y, x, "%s", choices[i]);
+    } else{
+      mvwprintw(menu_win, y, x, "%c %s",decorativeChar,choices[i]->d_name);
 
-    if (isFolder[i]) {
-      wattroff(menu_win, COLOR_PAIR(1));
     }
+
     ++y;
   }
   wattron(menu_win, COLOR_PAIR(0));
@@ -55,30 +58,32 @@ int main(int argc, char *argv[]) {
   char ext_media_path[50] = "/media/";
   strcat(ext_media_path, username);
 
-  struct dirent *de;
-  DIR *dr;
+  // struct dirent *de;
+  struct dirent **namelist = NULL;
+  size_t entIter = 0;
 
   int x, y, dir_entry_count, highlight = 1, choice = 0, c;
-  bool back = false, ext_media = false, resize = false;
+  bool back, ext_media, resize;
   while (1) {
-    
+    back = false;
+    ext_media = false;
+    resize = false;
     // folder highlighting
     init_pair(1, COLOR_BLACK, COLOR_CYAN);
 
     int xMax, yMax;
     getmaxyx(stdscr, yMax, xMax);
-    
+
     refresh();
     WINDOW *window = newwin(yMax, xMax, 0, 0);
     keypad(window, TRUE);
-
 
     highlight = 1;
     choice = 0;
     wclear(window);
 
     wrefresh(window);
-        box(window, 0, 0);
+    box(window, 0, 0);
 
     x = 2;
     y = 2;
@@ -87,45 +92,12 @@ int main(int argc, char *argv[]) {
 
     mvwprintw(window, y, x, "Current working directory: %s", getcwd(dir, 100));
 
-    dr = opendir(dir);
-    if (dr == NULL) {
-      mvwprintw(window, y, x + 50, "Could not open current directory");
-      wrefresh(window);
-      return 0;
+    if ((dir_entry_count = scandir(dir, &namelist, sdfilt, alphasort)) < 0) {
+      perror("scandir"); 
+      return 1;
     }
 
-    dir_entry_count = 0;
-    while ((de = readdir(dr)) != NULL) {
-      dir_entry_count++;
-    }
-    // za ponovni read
-
-    rewinddir(dr);
-
-    // Dynamic memory allocation and array
-    char **dir_entry = NULL;
-    int folder_indeces[dir_entry_count];
-    dir_entry = (char **)malloc(dir_entry_count * sizeof(char *));
-    for (int i = 0; i < dir_entry_count; i++) {
-      dir_entry[i] = (char *)malloc((MAX_FILE_NAME + 1) * sizeof(char));
-      if (dir_entry[i] == NULL) {
-        mvwprintw(window, y, x + 50, "Could not allocate memory");
-        wrefresh(window);
-
-        return 0;
-      }
-      // Making a lsit
-      if ((de = readdir(dr)) != NULL) {
-        strcpy(dir_entry[i], de->d_name);
-        if (de->d_type == DT_DIR) {
-          folder_indeces[i] = 1;
-        } else {
-          folder_indeces[i] = 0;
-        }
-      }
-    }
-    file_menu(window, highlight, x, y, dir_entry_count, dir_entry,
-              folder_indeces);
+    file_menu(window, highlight, x, y, dir_entry_count, namelist);
     while (1) {
       c = wgetch(window);
 
@@ -161,33 +133,28 @@ int main(int argc, char *argv[]) {
         mvwprintw(window, y, x + 30, "wrong char bro");
         wrefresh(window);
       }
-      file_menu(window, highlight, x, y, dir_entry_count, dir_entry,
-                folder_indeces);
+      file_menu(window, highlight, x, y, dir_entry_count, namelist);
       if (choice != 0 || back || ext_media || resize) {
         break;
       }
     }
     if (back) {
       strcpy(dir, "..");
-      back = false;
     } else if (ext_media) {
       strcpy(dir, ext_media_path);
-      ext_media = false;
-    } else if(choice != 0){
-      strcpy(dir, dir_entry[choice - 1]);
-    }else if(resize){
-      resize = false;
+    } else if (choice != 0) {
+      strcpy(dir, namelist[choice - 1]->d_name);
     }
-
-    // freeing memory
-    for (int i = 0; i < dir_entry_count; i++) {
-      free(dir_entry[i]);
-    }
-    // Free memory for the array of pointers
-    free(dir_entry);
-    closedir(dr);
   }
   endwin();
 
   return 0;
+}
+
+// filter that sorts out dot files
+int sdfilt(const struct dirent *de) {
+  if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
+    return 0;
+  else
+    return 1;
 }

@@ -9,28 +9,42 @@
 #define MAX_FILE_NAME 255
 
 void file_menu(WINDOW *menu_win, int highlight, int x, int y, int n_choices,
-               char *choices[]) {
+               char *choices[], int isFolder[]) {
   int i;
   x += 2;
   y += 2;
 
   box(menu_win, 0, 0);
   for (i = 0; i < n_choices; ++i) {
+    if(isFolder[i]){
+      wattron(menu_win,COLOR_PAIR(1));
+    }
     if (highlight == i + 1) /* High light the present choice */
     {
       wattron(menu_win, A_REVERSE);
-      mvwprintw(menu_win, y, x, "%s", choices[i]);
+      mvwprintw(menu_win, y, x,  "%s", choices[i]);
+      
       wattroff(menu_win, A_REVERSE);
     } else
       mvwprintw(menu_win, y, x, "%s", choices[i]);
+
+    if(isFolder[i]){
+      wattroff(menu_win,COLOR_PAIR(1));
+    }
     ++y;
   }
+  wattron(menu_win,COLOR_PAIR(0));
+
   wrefresh(menu_win);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
 
   initscr();
+  start_color();
+  //folder highlighting
+  init_pair(1,COLOR_BLACK, COLOR_CYAN);
+
   int xMax, yMax;
   getmaxyx(stdscr, yMax, xMax);
   WINDOW *window = newwin(yMax, xMax, 0, 0);
@@ -39,11 +53,24 @@ int main() {
   box(window, 0, 0);
 
   refresh();
-  char dir[256] = "";
+  char dir[256];
+
+  //check if there is a path in the commandline argument
+  if(argc <= 1){
+    strcpy(dir,"");
+  }else{
+    strcpy(dir,argv[argc-1]);
+  }
+  //constructs a path to the media folder
+  char* username = getlogin();
+  char ext_media_path[50]= "/media/";
+  strcat(ext_media_path, username);
+
   struct dirent *de;
   DIR *dr;
 
-  int x, y, file_count, highlight = 1, choice = 0, c;
+  int x, y, dir_entry_count, highlight = 1, choice = 0, c;
+  bool back = false, ext_media = false;
   while (1) {
     highlight = 1;
     choice = 0;
@@ -64,18 +91,21 @@ int main() {
       return 0;
     }
 
-    file_count = 0;
+    dir_entry_count = 0;
     while ((de = readdir(dr)) != NULL) {
-      file_count++;
+      dir_entry_count++;
     }
+    // za ponovni read
+
     rewinddir(dr);
 
     // Dynamic memory allocation and array
-    char **file_list = NULL;
-    file_list = (char **)malloc(file_count * sizeof(char *));
-    for (int i = 0; i < file_count; i++) {
-      file_list[i] = (char *)malloc((MAX_FILE_NAME + 1) * sizeof(char));
-      if (file_list[i] == NULL) {
+    char **dir_entry = NULL;
+    int folder_indeces[dir_entry_count]; 
+    dir_entry = (char **)malloc(dir_entry_count * sizeof(char *));
+    for (int i = 0; i < dir_entry_count; i++) {
+      dir_entry[i] = (char *)malloc((MAX_FILE_NAME + 1) * sizeof(char));
+      if (dir_entry[i] == NULL) {
         mvwprintw(window, y, x + 50, "Could not allocate memory");
         wrefresh(window);
 
@@ -83,28 +113,36 @@ int main() {
       }
       // Making a lsit
       if ((de = readdir(dr)) != NULL) {
-        strcpy(file_list[i], de->d_name);
+        strcpy(dir_entry[i], de->d_name);
+        if(de->d_type == DT_DIR){
+          folder_indeces[i] = 1;
+        }else{
+          folder_indeces[i] = 0;
+        }
       }
     }
-    // za ponovni read
-    file_menu(window, highlight, x, y, file_count, file_list);
+    file_menu(window, highlight, x, y, dir_entry_count, dir_entry,folder_indeces);
     while (1) {
       c = wgetch(window);
 
       switch (c) {
       case KEY_UP:
         if (highlight == 1)
-          highlight = file_count;
+          highlight = dir_entry_count;
         else
           --highlight;
         break;
       case KEY_DOWN:
-        if (highlight == file_count)
+        if (highlight == dir_entry_count)
           highlight = 1;
         else
           ++highlight;
         break;
+      case KEY_LEFT:
+        back = true;
+        break;
       case KEY_BACKSPACE:
+        ext_media = true;
         break;
       case 10:
         choice = highlight;
@@ -114,22 +152,29 @@ int main() {
         mvwprintw(window, y, x + 30, "wrong char bro");
         wrefresh(window);
       }
-      file_menu(window, highlight, x, y, file_count, file_list);
-      if (choice != 0) {
+      file_menu(window, highlight, x, y, dir_entry_count, dir_entry,folder_indeces);
+      if (choice != 0 || back || ext_media) {
         break;
       }
     }
-    strcpy(dir,file_list[choice-1]);
+    if(back){
+      strcpy(dir,"..");
+      back = false;
+    }else if(ext_media){
+      strcpy(dir, ext_media_path);
+      ext_media = false;
+    }
+    else
+      strcpy(dir,dir_entry[choice-1]);
 
     // freeing memory
-    for (int i = 0; i < file_count; i++) {
-      free(file_list[i]);
+    for (int i = 0; i < dir_entry_count; i++) {
+      free(dir_entry[i]);
     }
     // Free memory for the array of pointers
-    free(file_list);
+    free(dir_entry);
     closedir(dr);
   }
-  //getch();
   endwin();
 
   return 0;
